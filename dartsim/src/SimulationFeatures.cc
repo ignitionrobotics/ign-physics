@@ -53,6 +53,14 @@ void SimulationFeatures::WorldForwardStep(
   // TODO(MXG): Parse input
   world->step();
   // TODO(MXG): Fill in output and state
+
+  for (auto &skeleton: this->skeletonsWithInverseDynamics)
+  {
+    skeleton->computeInverseDynamics(
+        /*_withExternalForces=*/true,
+        /*_withDampingForces=*/true,
+        /*_withSpringForces=*/true);
+  }
 }
 
 std::vector<SimulationFeatures::ContactInternal>
