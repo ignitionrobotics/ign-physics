@@ -6,7 +6,17 @@ ign_add_component(dartsim INTERFACE
   GET_TARGET_NAME features)
 
 target_link_libraries(${features} INTERFACE ${DART_LIBRARIES})
-target_include_directories(${features} SYSTEM INTERFACE ${DART_INCLUDE_DIRS})
+
+if(USE_VENDOR_DART)
+  target_include_directories(${features} INTERFACE
+    $<BUILD_INTERFACE:${DART_VENDOR_INCLUDE_DIRS}>
+    $<BUILD_INTERFACE:${BULLET_INCLUDE_DIRS}>
+    $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}>
+    $<INSTALL_INTERFACE:${IGN_INCLUDE_INSTALL_DIR_FULL}/vendor/dart>)
+else()
+  target_include_directories(${features} SYSTEM INTERFACE ${DART_INCLUDE_DIRS})
+endif()
+
 if (MSVC)
   # needed by DART, see https://github.com/dartsim/dart/issues/753
   target_compile_options(${features} INTERFACE "/permissive-")
@@ -25,6 +35,11 @@ ign_add_component(${engine_name}
   DEPENDS_ON_COMPONENTS dartsim
   GET_TARGET_NAME dartsim_plugin)
 
+add_dependencies(${PROJECT_LIBRARY_TARGET_NAME}-dartsim-plugin dart)
+if(USE_VENDOR_DART)
+  add_dependencies(${PROJECT_LIBRARY_TARGET_NAME}-dartsim-plugin dart_project)
+endif()
+
 target_link_libraries(${dartsim_plugin}
   PUBLIC
     ${features}
@@ -39,6 +54,22 @@ target_link_libraries(${dartsim_plugin}
 
 # Note that plugins are currently being installed in 2 places: /lib and the engine-plugins dir
 install(TARGETS ${dartsim_plugin} DESTINATION ${IGNITION_PHYSICS_ENGINE_INSTALL_DIR})
+
+if(USE_VENDOR_DART)
+  # Set RPATH/RUNPATH to point to engine install dir. This makes possible
+  # to find embedded dart libraries withotu interfere with oter system directories
+  set_target_properties(${dartsim_plugin} PROPERTIES
+      INSTALL_RPATH ${IGNITION_PHYSICS_ENGINE_INSTALL_DIR})
+
+  foreach(lib ${DART_VENDOR_LIBRARY_PATH} ${DART_VENDOR_LIBRARY_LINK_PATH}
+	      ${DART_COLLISION_VENDOR_LIBRARY_PATH} ${DART_COLLISION_VENDOR_LIBRARY_LINK_PATH}
+	      ${DART_ODEL_VENDOR_LIBRARY_PATH} ${DART_ODEL_VENDOR_LIBRARY_LINK_PATH})
+	  #      install(FILES ${lib}
+	  # DESTINATION ${CMAKE_INSTALL_PREFIX}/${IGN_LIB_INSTALL_DIR})
+      install(FILES ${lib}
+	DESTINATION ${IGNITION_PHYSICS_ENGINE_INSTALL_DIR})
+  endforeach()
+endif()
 
 # The library created by `ign_add_component` includes the ign-physics version
 # (i.e. libignition-physics1-name-plugin.so), but for portability,
@@ -69,6 +100,10 @@ ign_build_tests(
   TEST_LIST tests)
 
 foreach(test ${tests})
+   if(USE_VENDOR_DART)
+     set_tests_properties(${test} PROPERTIES
+	 ENVIRONMENT "LD_LIBRARY_PATH=${DART_VENDOR_LIBRARY_DIR}")
+  endif()
 
   target_compile_definitions(${test} PRIVATE
     "dartsim_plugin_LIB=\"$<TARGET_FILE:${dartsim_plugin}>\""
